@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(MyApp());
@@ -23,14 +24,6 @@ class MyHomePage extends StatefulWidget {
   _MyHomePageState createState() => _MyHomePageState();
 }
 
-class VideoDay {
-  DateTime date;
-  bool watched;
-  String memo;
-
-  VideoDay({required this.date, this.watched = false, this.memo = ''});
-}
-
 class _MyHomePageState extends State<MyHomePage> {
   int _selectedIndex = 0;
   late YoutubePlayerController _controller;
@@ -47,6 +40,27 @@ class _MyHomePageState extends State<MyHomePage> {
       initialVideoId: 'LyCelsH_9L0',
       flags: YoutubePlayerFlags(autoPlay: false),
     );
+    _loadPreferences();
+  }
+
+  void _loadPreferences() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isLiked =
+          prefs.getBool(DateFormat('yyyyMMdd').format(DateTime.now())) ?? false;
+      _memoController.text = prefs.getString(
+              DateFormat('yyyyMMdd').format(DateTime.now()) + '_memo') ??
+          '';
+    });
+  }
+
+  void _savePreferences() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(
+        DateFormat('yyyyMMdd').format(DateTime.now()), _isLiked);
+    await prefs.setString(
+        DateFormat('yyyyMMdd').format(DateTime.now()) + '_memo',
+        _memoController.text);
   }
 
   @override
@@ -62,9 +76,7 @@ class _MyHomePageState extends State<MyHomePage> {
             focusedDay: _focusedDay,
             calendarFormat: _calendarFormat,
             selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-            onDaySelected: (selectedDay, focusedDay) {
-              // 이 부분을 비워 클릭 이벤트에 대한 반응 없도록 함
-            },
+            onDaySelected: (selectedDay, focusedDay) {},
           ),
           Column(
             children: [
@@ -81,6 +93,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   setState(() {
                     _isLiked = !_isLiked;
                   });
+                  _savePreferences();
                 },
               ),
               TextField(
@@ -88,6 +101,9 @@ class _MyHomePageState extends State<MyHomePage> {
                 decoration: InputDecoration(
                     labelText: '메모', border: OutlineInputBorder()),
                 maxLines: 5,
+                onChanged: (text) {
+                  _savePreferences();
+                },
               ),
             ],
           ),
