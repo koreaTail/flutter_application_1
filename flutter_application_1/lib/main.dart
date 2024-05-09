@@ -30,83 +30,64 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _isLiked = false;
   TextEditingController _memoController = TextEditingController();
   CalendarFormat _calendarFormat = CalendarFormat.month;
-  DateTime _focusedDay = DateTime.now();
+  late DateTime _focusedDay;
   DateTime? _selectedDay;
+  Map<DateTime, bool> watchedDays = {};
+  SharedPreferences? prefs;
 
   @override
   void initState() {
     super.initState();
+    DateTime now = DateTime.now();
+    _focusedDay = DateTime(now.year, now.month, now.day);
+    _selectedDay = _focusedDay;
     _controller = YoutubePlayerController(
       initialVideoId: 'LyCelsH_9L0',
       flags: YoutubePlayerFlags(autoPlay: false),
     );
-    _loadPreferences();
+    initPrefs();
+    _loadWatchedStatus();
   }
 
-  void _loadPreferences() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isLiked =
-          prefs.getBool(DateFormat('yyyyMMdd').format(DateTime.now())) ?? false;
-      _memoController.text = prefs.getString(
-              DateFormat('yyyyMMdd').format(DateTime.now()) + '_memo') ??
-          '';
-    });
+  void initPrefs() async {
+    prefs = await SharedPreferences.getInstance();
   }
 
   void _savePreferences() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(
-        DateFormat('yyyyMMdd').format(DateTime.now()), _isLiked);
-    await prefs.setString(
-        DateFormat('yyyyMMdd').format(DateTime.now()) + '_memo',
-        _memoController.text);
+    if (prefs != null) {
+      DateTime now = DateTime.now();
+      String formattedDate = DateFormat('yyyyMMdd').format(now);
+      await prefs!.setBool(formattedDate, _isLiked);
+      await prefs!.setString(formattedDate + '_memo', _memoController.text);
+      watchedDays[now] = _isLiked;
+      print('Saved: $formattedDate, isLiked: $_isLiked, Date: $now');
+      setState(() {});
+    }
+  }
+
+  void _loadWatchedStatus() async {
+    if (prefs != null) {
+      Set<String> keys = prefs!.getKeys();
+      watchedDays.clear();
+      for (String key in keys) {
+        if (key.endsWith('_memo')) continue;
+        DateTime date = DateFormat('yyyyMMdd').parse(key);
+        bool watched = prefs!.getBool(key) ?? false;
+        watchedDays[date] = watched;
+        print('Loaded: $key, watched: $watched, Date: $date');
+      }
+      setState(() {});
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('플러터 앱')),
+      appBar: AppBar(title: Text('Flutter App')),
       body: IndexedStack(
         index: _selectedIndex,
         children: [
-          TableCalendar(
-            firstDay: DateTime.utc(2010, 10, 16),
-            lastDay: DateTime.utc(2030, 3, 14),
-            focusedDay: _focusedDay,
-            calendarFormat: _calendarFormat,
-            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-            onDaySelected: (selectedDay, focusedDay) {},
-          ),
-          Column(
-            children: [
-              Text(
-                DateFormat('yyyy년 M월 d일').format(DateTime.now()),
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              YoutubePlayer(controller: _controller),
-              IconButton(
-                icon: Icon(_isLiked ? Icons.favorite : Icons.favorite_border,
-                    size: 48),
-                color: Colors.red,
-                onPressed: () {
-                  setState(() {
-                    _isLiked = !_isLiked;
-                  });
-                  _savePreferences();
-                },
-              ),
-              TextField(
-                controller: _memoController,
-                decoration: InputDecoration(
-                    labelText: '메모', border: OutlineInputBorder()),
-                maxLines: 5,
-                onChanged: (text) {
-                  _savePreferences();
-                },
-              ),
-            ],
-          ),
+          // Add other widgets as needed
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
