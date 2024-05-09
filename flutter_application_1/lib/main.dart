@@ -54,13 +54,12 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _savePreferences() async {
-    if (prefs != null) {
-      DateTime now = DateTime.now();
-      String formattedDate = DateFormat('yyyyMMdd').format(now);
+    if (prefs != null && _selectedDay != null) {
+      String formattedDate = DateFormat('yyyyMMdd').format(_selectedDay!);
       await prefs!.setBool(formattedDate, _isLiked);
       await prefs!.setString(formattedDate + '_memo', _memoController.text);
-      watchedDays[now] = _isLiked;
-      print('Saved: $formattedDate, isLiked: $_isLiked, Date: $now');
+      watchedDays[_selectedDay!] = _isLiked;
+      print('Saved: $formattedDate, isLiked: $_isLiked');
       setState(() {});
     }
   }
