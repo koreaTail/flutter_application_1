@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 void main() {
   runApp(MyApp());
@@ -25,16 +26,14 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _selectedIndex = 1;
+  int _selectedIndex = 0;
   late YoutubePlayerController _controller;
   bool _isLiked = false;
   TextEditingController _memoController = TextEditingController();
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
-  Map<String, bool> likedDays = {};
-  Map<String, String> memoDays = {};
-  late SharedPreferences _prefs;
+  late DatabaseHelper _dbHelper;
 
   @override
   void initState() {
@@ -43,55 +42,20 @@ class _MyHomePageState extends State<MyHomePage> {
       initialVideoId: 'LyCelsH_9L0',
       flags: YoutubePlayerFlags(autoPlay: false),
     );
-    _initializePreferences();
+    _dbHelper = DatabaseHelper.instance;
+    _loadData();
   }
 
-  Future<void> _initializePreferences() async {
-    _prefs = await SharedPreferences.getInstance();
-    _loadPreferences();
+  void _loadData() async {
+    _isLiked =
+        await _dbHelper.getLikedStatus(_formatDate(_focusedDay)) ?? false;
+    _memoController.text =
+        await _dbHelper.getMemo(_formatDate(_focusedDay)) ?? '';
   }
 
-  void _loadPreferences() {
-    setState(() {
-      likedDays = Map<String, bool>.fromIterable(
-          _prefs.getKeys().where((key) => key.endsWith('_liked')),
-          key: (item) => item as String,
-          value: (item) => _prefs.getBool(item) ?? false);
-      memoDays = Map<String, String>.fromIterable(
-          _prefs.getKeys().where((key) => key.endsWith('_memo')),
-          key: (item) => item as String,
-          value: (item) => _prefs.getString(item) ?? '');
-    });
-  }
-
-  String _formatDate(DateTime dateTime) =>
-      DateFormat('yyyyMMdd').format(dateTime);
-
-  void _savePreferences() async {
-    try {
-      String formattedDate = _formatDate(_selectedDay ?? DateTime.now());
-      await _prefs.setBool(formattedDate + '_liked', _isLiked);
-      await _prefs.setString(formattedDate + '_memo', _memoController.text);
-    } catch (e) {
-      print('Failed to save preferences: $e');
-    }
-  }
-
-  void _updateDataForSelectedDay(DateTime selectedDay) {
-    String keyDate = _formatDate(selectedDay);
-    setState(() {
-      _isLiked = likedDays[keyDate + '_liked'] ?? false;
-      _memoController.text = memoDays[keyDate + '_memo'] ?? '';
-    });
-  }
-
-  void _saveTodayPreferences(String keyDate, bool isLiked, String memo) async {
-    try {
-      await _prefs.setBool(keyDate + '_liked', isLiked);
-      await _prefs.setString(keyDate + '_memo', memo);
-    } catch (e) {
-      print('Failed to save today preferences: $e');
-    }
+  void _updateData(String date, bool liked, String memo) async {
+    await _dbHelper.updateDayDetails(date, liked, memo);
+    _loadData();
   }
 
   Widget buildCalendarTab() {
@@ -107,12 +71,12 @@ class _MyHomePageState extends State<MyHomePage> {
             onDaySelected: (selectedDay, focusedDay) {
               setState(() {
                 _selectedDay = selectedDay;
-                _focusedDay = focusedDay; // Update `_focusedDay` here as well
+                _focusedDay = focusedDay;
               });
-              _updateDataForSelectedDay(selectedDay);
+              _loadData();
             },
           ),
-          if (_selectedDay != null) // Only show when a day is selected
+          if (_selectedDay != null)
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Text(
@@ -125,10 +89,9 @@ class _MyHomePageState extends State<MyHomePage> {
                 size: 48),
             color: Colors.red,
             onPressed: () {
-              setState(() {
-                _isLiked = !_isLiked;
-              });
-              _savePreferences();
+              _isLiked = !_isLiked;
+              _updateData(_formatDate(_selectedDay ?? DateTime.now()), _isLiked,
+                  _memoController.text);
             },
           ),
           TextField(
@@ -137,7 +100,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 InputDecoration(labelText: '메모', border: OutlineInputBorder()),
             maxLines: 5,
             onChanged: (text) {
-              _savePreferences();
+              _updateData(
+                  _formatDate(_selectedDay ?? DateTime.now()), _isLiked, text);
             },
           ),
         ],
@@ -145,45 +109,8 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget buildTodayTab() {
-    DateTime today = DateTime.now();
-    String todayKey = _formatDate(today);
-
-    bool todayIsLiked = likedDays[todayKey + '_liked'] ?? false;
-    String todayMemo = memoDays[todayKey + '_memo'] ?? '';
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Text(
-            DateFormat('yyyy년 M월 d일').format(today),
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-        ),
-        IconButton(
-          icon: Icon(todayIsLiked ? Icons.favorite : Icons.favorite_border,
-              size: 48),
-          color: Colors.red,
-          onPressed: () {
-            setState(() {
-              likedDays[todayKey + '_liked'] = !todayIsLiked;
-              _saveTodayPreferences(todayKey, !todayIsLiked, todayMemo);
-            });
-          },
-        ),
-        TextField(
-          controller: TextEditingController(text: todayMemo),
-          decoration:
-              InputDecoration(labelText: '메모', border: OutlineInputBorder()),
-          maxLines: 5,
-          onChanged: (text) {
-            _saveTodayPreferences(todayKey, todayIsLiked, text);
-          },
-        ),
-      ],
-    );
-  }
+  String _formatDate(DateTime dateTime) =>
+      DateFormat('yyyyMMdd').format(dateTime);
 
   @override
   Widget build(BuildContext context) {
@@ -193,7 +120,6 @@ class _MyHomePageState extends State<MyHomePage> {
         index: _selectedIndex,
         children: [
           buildCalendarTab(),
-          buildTodayTab(),
           // Other tabs widgets here
         ],
       ),
@@ -219,5 +145,73 @@ class _MyHomePageState extends State<MyHomePage> {
     _controller.dispose();
     _memoController.dispose();
     super.dispose();
+  }
+}
+
+class DatabaseHelper {
+  static final _databaseName = "MyDatabase.db";
+  static final _databaseVersion = 1;
+  static final table = 'day_details';
+  static final columnDate = 'date';
+  static final columnLiked = 'liked';
+  static final columnMemo = 'memo';
+
+  DatabaseHelper._privateConstructor();
+  static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
+
+  static Database? _database;
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  _initDatabase() async {
+    String path = join(await getDatabasesPath(), _databaseName);
+    return await openDatabase(path,
+        version: _databaseVersion, onCreate: _onCreate);
+  }
+
+  Future _onCreate(Database db, int version) async {
+    await db.execute('''
+          CREATE TABLE $table (
+            $columnDate TEXT PRIMARY KEY,
+            $columnLiked INTEGER NOT NULL,
+            $columnMemo TEXT NOT NULL
+          )
+          ''');
+  }
+
+  Future<bool?> getLikedStatus(String date) async {
+    Database db = await instance.database;
+    var res = await db.query(table,
+        columns: [columnLiked], where: '$columnDate = ?', whereArgs: [date]);
+    if (res.isNotEmpty) {
+      return res.first[columnLiked] == 1;
+    }
+    return null;
+  }
+
+  Future<String?> getMemo(String date) async {
+    Database db = await instance.database;
+    var res = await db.query(table,
+        columns: [columnMemo], where: '$columnDate = ?', whereArgs: [date]);
+    if (res.isNotEmpty) {
+      return res.first[columnMemo] as String?;
+    }
+    return null;
+  }
+
+  Future<void> updateDayDetails(String date, bool liked, String memo) async {
+    Database db = await instance.database;
+    var res = await db.update(
+        table, {columnLiked: liked ? 1 : 0, columnMemo: memo},
+        where: '$columnDate = ?', whereArgs: [date]);
+    if (res == 0) {
+      // If no update occurred, insert new record
+      await db.insert(table,
+          {columnDate: date, columnLiked: liked ? 1 : 0, columnMemo: memo});
+    }
   }
 }
