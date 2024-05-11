@@ -29,7 +29,10 @@ class _MyHomePageState extends State<MyHomePage> {
   int _selectedIndex = 0;
   late YoutubePlayerController _controller;
   bool _isLiked = false;
+  bool _todayIsLiked = false; // 오늘 탭의 좋아요 상태
   TextEditingController _memoController = TextEditingController();
+  TextEditingController _todayMemoController =
+      TextEditingController(); // 오늘 탭의 메모 컨트롤러
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
@@ -43,33 +46,42 @@ class _MyHomePageState extends State<MyHomePage> {
       flags: YoutubePlayerFlags(autoPlay: false),
     );
     _dbHelper = DatabaseHelper.instance;
-    _loadData();
+    _loadData(_formatDate(DateTime.now())); // '달력' 탭의 초기 로드
+    _loadTodayData(); // '오늘' 탭의 데이터 로드
   }
 
-  void _loadData() async {
-    _isLiked =
-        await _dbHelper.getLikedStatus(_formatDate(_focusedDay)) ?? false;
-    _memoController.text =
-        await _dbHelper.getMemo(_formatDate(_focusedDay)) ?? '';
+  void _loadData(String date) async {
+    bool? isLiked = await _dbHelper.getLikedStatus(date);
+    String? memo = await _dbHelper.getMemo(date);
+    setState(() {
+      _isLiked = isLiked ?? false;
+      _memoController.text = memo ?? '';
+    });
+  }
+
+  void _loadTodayData() async {
+    String todayKey = _formatDate(DateTime.now());
+    bool? isLiked = await _dbHelper.getLikedStatus(todayKey);
+    String? memo = await _dbHelper.getMemo(todayKey);
+    setState(() {
+      _todayIsLiked = isLiked ?? false;
+      _todayMemoController.text = memo ?? '';
+    });
   }
 
   void _updateData(String date, bool liked, String memo) async {
     await _dbHelper.updateDayDetails(date, liked, memo);
-    _loadData();
+    _loadData(date); // '달력' 탭 데이터 갱신
+
+    // '오늘' 탭에서의 변경사항을 갱신하기 위한 조건 추가
+    if (date == _formatDate(DateTime.now())) {
+      _loadTodayData(); // 변경된 날짜가 오늘 날짜인 경우에만 '오늘' 탭 데이터도 갱신
+    }
   }
 
   Widget buildTodayTab() {
-    // Assuming today's data is always expected to be available
     DateTime today = DateTime.now();
-    String todayKey = DateFormat('yyyyMMdd').format(today);
-
-    // Fetch today's data, ensuring to return a non-null widget
-    Map<String, bool> likedDays =
-        {}; // Define the likedDays variable as an empty map
-
-    bool todayIsLiked = likedDays[todayKey + '_liked'] ?? false;
-    Map<String, String> memoDays = {};
-    String todayMemo = memoDays[todayKey + '_memo'] ?? '';
+    String todayKey = _formatDate(today);
 
     return Column(
       children: [
@@ -81,23 +93,21 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
         IconButton(
-          icon: Icon(todayIsLiked ? Icons.favorite : Icons.favorite_border,
+          icon: Icon(_todayIsLiked ? Icons.favorite : Icons.favorite_border,
               size: 48),
           color: Colors.red,
           onPressed: () {
-            setState(() {
-              likedDays[todayKey + '_liked'] = !todayIsLiked;
-              // Assume update method handles changes and ensures consistency
-            });
+            bool newLiked = !_todayIsLiked;
+            _updateData(todayKey, newLiked, _todayMemoController.text);
           },
         ),
         TextField(
-          controller: TextEditingController(text: todayMemo),
+          controller: _todayMemoController,
           decoration:
               InputDecoration(labelText: '메모', border: OutlineInputBorder()),
           maxLines: 5,
           onChanged: (text) {
-            // Assume update method handles changes and ensures consistency
+            _updateData(_formatDate(DateTime.now()), _todayIsLiked, text);
           },
         ),
       ],
@@ -119,7 +129,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 _selectedDay = selectedDay;
                 _focusedDay = focusedDay;
               });
-              _loadData();
+              _loadData(_formatDate(selectedDay));
             },
           ),
           if (_selectedDay != null)
@@ -161,14 +171,13 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('플러터 앱')),
+      appBar: AppBar(title: Text('Flutter App')),
       body: IndexedStack(
         index: _selectedIndex,
         children: [
-          buildCalendarTab(), // Ensure this never returns null
-          // Make sure all the tabs are handled and none return null
-          buildTodayTab() ?? SizedBox(), // Example safeguard
-          buildProfileTab() ?? SizedBox(), // Example safeguard
+          buildCalendarTab(),
+          buildTodayTab(),
+          buildProfileTab(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
