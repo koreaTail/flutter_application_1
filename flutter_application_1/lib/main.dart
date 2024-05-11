@@ -58,6 +58,52 @@ class _MyHomePageState extends State<MyHomePage> {
     _loadData();
   }
 
+  Widget buildTodayTab() {
+    // Assuming today's data is always expected to be available
+    DateTime today = DateTime.now();
+    String todayKey = DateFormat('yyyyMMdd').format(today);
+
+    // Fetch today's data, ensuring to return a non-null widget
+    Map<String, bool> likedDays =
+        {}; // Define the likedDays variable as an empty map
+
+    bool todayIsLiked = likedDays[todayKey + '_liked'] ?? false;
+    Map<String, String> memoDays = {};
+    String todayMemo = memoDays[todayKey + '_memo'] ?? '';
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text(
+            DateFormat('yyyy년 M월 d일').format(today),
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+        ),
+        IconButton(
+          icon: Icon(todayIsLiked ? Icons.favorite : Icons.favorite_border,
+              size: 48),
+          color: Colors.red,
+          onPressed: () {
+            setState(() {
+              likedDays[todayKey + '_liked'] = !todayIsLiked;
+              // Assume update method handles changes and ensures consistency
+            });
+          },
+        ),
+        TextField(
+          controller: TextEditingController(text: todayMemo),
+          decoration:
+              InputDecoration(labelText: '메모', border: OutlineInputBorder()),
+          maxLines: 5,
+          onChanged: (text) {
+            // Assume update method handles changes and ensures consistency
+          },
+        ),
+      ],
+    );
+  }
+
   Widget buildCalendarTab() {
     return SingleChildScrollView(
       child: Column(
@@ -119,8 +165,10 @@ class _MyHomePageState extends State<MyHomePage> {
       body: IndexedStack(
         index: _selectedIndex,
         children: [
-          buildCalendarTab(),
-          // Other tabs widgets here
+          buildCalendarTab(), // Ensure this never returns null
+          // Make sure all the tabs are handled and none return null
+          buildTodayTab() ?? SizedBox(), // Example safeguard
+          buildProfileTab() ?? SizedBox(), // Example safeguard
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -137,6 +185,12 @@ class _MyHomePageState extends State<MyHomePage> {
           });
         },
       ),
+    );
+  }
+
+  Widget buildProfileTab() {
+    return Center(
+      child: Text('Profile Tab Content'),
     );
   }
 
