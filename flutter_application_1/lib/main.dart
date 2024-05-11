@@ -4,6 +4,24 @@ import 'package:path/path.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+Future<String> fetchLatestVideoId(String playlistId, String apiKey) async {
+  final String url = 'https://www.googleapis.com/youtube/v3/playlistItems'
+      '?part=snippet&maxResults=1'
+      '&playlistId=$playlistId'
+      '&key=$apiKey';
+  final response = await http.get(Uri.parse(url));
+
+  if (response.statusCode == 200) {
+    final data = json.decode(response.body);
+    final videoId = data['items'][0]['snippet']['resourceId']['videoId'];
+    return videoId;
+  } else {
+    throw Exception('Failed to load video id');
+  }
+}
 
 void main() {
   runApp(MyApp());
@@ -26,13 +44,12 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _selectedIndex = 0;
-  late YoutubePlayerController _controller;
+  int _selectedIndex = 1;
+  YoutubePlayerController? _youtubeController; // YoutubePlayerController 초기화 변경
   bool _isLiked = false;
-  bool _todayIsLiked = false; // 오늘 탭의 좋아요 상태
+  bool _todayIsLiked = false;
   TextEditingController _memoController = TextEditingController();
-  TextEditingController _todayMemoController =
-      TextEditingController(); // 오늘 탭의 메모 컨트롤러
+  TextEditingController _todayMemoController = TextEditingController();
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
@@ -41,13 +58,34 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    _controller = YoutubePlayerController(
-      initialVideoId: 'LyCelsH_9L0',
-      flags: YoutubePlayerFlags(autoPlay: false),
-    );
     _dbHelper = DatabaseHelper.instance;
-    _loadData(_formatDate(DateTime.now())); // '달력' 탭의 초기 로드
-    _loadTodayData(); // '오늘' 탭의 데이터 로드
+    _loadData(_formatDate(DateTime.now()));
+    _loadTodayData();
+    fetchLatestVideoId('PLJSBQHYszd6jd5uVyqSGbQd5Td25Qw1j5',
+            'AIzaSyAdiA4UAZcPxO_kJuiy42P1oYyPHBKkGPU')
+        .then((videoId) {
+      setState(() {
+        _youtubeController = YoutubePlayerController(
+          initialVideoId: videoId,
+          flags: YoutubePlayerFlags(autoPlay: true, mute: false),
+        );
+      });
+    }).catchError((error) {
+      print('Failed to load video ID: $error');
+    });
+  }
+
+  Widget buildYoutubePlayer() {
+    if (_youtubeController == null) {
+      return Center(child: CircularProgressIndicator());
+    }
+    return YoutubePlayer(
+      controller: _youtubeController!,
+      showVideoProgressIndicator: true,
+      onReady: () {
+        _youtubeController!.addListener(() {});
+      },
+    );
   }
 
   void _loadData(String date) async {
@@ -71,11 +109,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _updateData(String date, bool liked, String memo) async {
     await _dbHelper.updateDayDetails(date, liked, memo);
-    _loadData(date); // '달력' 탭 데이터 갱신
-
-    // '오늘' 탭에서의 변경사항을 갱신하기 위한 조건 추가
+    _loadData(date);
     if (date == _formatDate(DateTime.now())) {
-      _loadTodayData(); // 변경된 날짜가 오늘 날짜인 경우에만 '오늘' 탭 데이터도 갱신
+      _loadTodayData();
     }
   }
 
@@ -92,6 +128,7 @@ class _MyHomePageState extends State<MyHomePage> {
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
         ),
+        buildYoutubePlayer(),
         IconButton(
           icon: Icon(_todayIsLiked ? Icons.favorite : Icons.favorite_border,
               size: 48),
@@ -191,6 +228,12 @@ class _MyHomePageState extends State<MyHomePage> {
         onTap: (index) {
           setState(() {
             _selectedIndex = index;
+            if (index == 0) {
+              DateTime today = DateTime.now();
+              _focusedDay = today;
+              _selectedDay = today;
+              _loadData(_formatDate(today));
+            }
           });
         },
       ),
@@ -205,8 +248,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   void dispose() {
-    _controller.dispose();
+    _youtubeController?.dispose();
     _memoController.dispose();
+    _todayMemoController.dispose();
     super.dispose();
   }
 }
