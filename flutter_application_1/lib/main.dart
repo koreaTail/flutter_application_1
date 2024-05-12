@@ -45,7 +45,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _selectedIndex = 1;
-  YoutubePlayerController? _youtubeController; // YoutubePlayerController 초기화 변경
+  YoutubePlayerController? _youtubeController;
   bool _isLiked = false;
   bool _todayIsLiked = false;
   TextEditingController _memoController = TextEditingController();
@@ -61,7 +61,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _dbHelper = DatabaseHelper.instance;
     _loadData(_formatDate(DateTime.now()));
     _loadTodayData();
-    fetchLatestVideoId('PLJSBQHYszd6jd5uVyqSGbQd5Td25Qw1j5',
+    fetchLatestVideoId('PLVcVykBcFZTQt7cYp0Oy9WRHCIS7qvUfP',
             'AIzaSyAdiA4UAZcPxO_kJuiy42P1oYyPHBKkGPU')
         .then((videoId) {
       setState(() {
@@ -144,7 +144,7 @@ class _MyHomePageState extends State<MyHomePage> {
               InputDecoration(labelText: '메모', border: OutlineInputBorder()),
           maxLines: 5,
           onChanged: (text) {
-            _updateData(_formatDate(DateTime.now()), _todayIsLiked, text);
+            // 여기서 상태를 업데이트하지 않고 입력을 관리합니다.
           },
         ),
       ],
