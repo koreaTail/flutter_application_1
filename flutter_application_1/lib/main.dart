@@ -13,7 +13,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter App',
+      title: '365공동체 성경읽기',
       theme: ThemeData(primarySwatch: Colors.blue),
       home: MyHomePage(),
     );
@@ -131,7 +131,7 @@ class _MyHomePageState extends State<MyHomePage> {
           padding: const EdgeInsets.all(8.0),
           child: Text(
             DateFormat('yyyy년 M월 d일').format(today),
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
         ),
         IconButton(
@@ -197,7 +197,7 @@ class _MyHomePageState extends State<MyHomePage> {
               padding: const EdgeInsets.all(8.0),
               child: Text(
                 DateFormat('yyyy년 M월 d일').format(_selectedDay!),
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ),
           IconButton(
@@ -227,7 +227,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Flutter App')),
+      appBar: AppBar(title: Text('365 공동체 성경읽기')),
       body: IndexedStack(
         index: _selectedIndex,
         children: [
@@ -249,7 +249,25 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  bool isLeapYear(int year) {
+    return (year % 4 == 0) && (year % 100 != 0 || year % 400 == 0);
+  }
+
   Widget buildProfileTab() {
+    DateTime now = DateTime.now();
+    int totalDaysThisYear = 365 +
+        (isLeapYear(now.year)
+            ? 1
+            : 0); // Calculate the total days including leap year
+    int daysSinceYearStart = now.difference(DateTime(now.year)).inDays + 1;
+    int daysWatchedThisYear = _likedDays.keys
+        .where(
+            (date) => date.year == now.year && _likedDays[date]?.first == true)
+        .length;
+
+    double periodCompletionRate =
+        (daysWatchedThisYear / daysSinceYearStart) * 100;
+
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -260,6 +278,18 @@ class _MyHomePageState extends State<MyHomePage> {
               "내 정보",
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
+          ),
+          // Text(
+          //   "${daysWatchedThisYear}회 / ${totalDaysThisYear}일",
+          //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          // ),
+          Text(
+            "시청완료: ${daysWatchedThisYear}회 / ${daysSinceYearStart}일",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            "시청완료율: ${periodCompletionRate.toStringAsFixed(2)}%",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ],
       ),
