@@ -3,25 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-
-Future<String> fetchLatestVideoId(String playlistId, String apiKey) async {
-  final String url = 'https://www.googleapis.com/youtube/v3/playlistItems'
-      '?part=snippet&maxResults=1'
-      '&playlistId=$playlistId'
-      '&key=$apiKey';
-  final response = await http.get(Uri.parse(url));
-
-  if (response.statusCode == 200) {
-    final data = json.decode(response.body);
-    final videoId = data['items'][0]['snippet']['resourceId']['videoId'];
-    return videoId;
-  } else {
-    throw Exception('Failed to load video id');
-  }
-}
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   runApp(MyApp());
@@ -45,7 +27,6 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _selectedIndex = 1;
-  YoutubePlayerController? _youtubeController;
   bool _isLiked = false;
   bool _todayIsLiked = false;
   TextEditingController _memoController = TextEditingController();
@@ -61,31 +42,6 @@ class _MyHomePageState extends State<MyHomePage> {
     _dbHelper = DatabaseHelper.instance;
     _loadData(_formatDate(DateTime.now()));
     _loadTodayData();
-    fetchLatestVideoId('PLVcVykBcFZTQt7cYp0Oy9WRHCIS7qvUfP',
-            'AIzaSyAdiA4UAZcPxO_kJuiy42P1oYyPHBKkGPU')
-        .then((videoId) {
-      setState(() {
-        _youtubeController = YoutubePlayerController(
-          initialVideoId: videoId,
-          flags: YoutubePlayerFlags(autoPlay: true, mute: false),
-        );
-      });
-    }).catchError((error) {
-      print('Failed to load video ID: $error');
-    });
-  }
-
-  Widget buildYoutubePlayer() {
-    if (_youtubeController == null) {
-      return Center(child: CircularProgressIndicator());
-    }
-    return YoutubePlayer(
-      controller: _youtubeController!,
-      showVideoProgressIndicator: true,
-      onReady: () {
-        _youtubeController!.addListener(() {});
-      },
-    );
   }
 
   void _loadData(String date) async {
@@ -121,6 +77,26 @@ class _MyHomePageState extends State<MyHomePage> {
 
     return Column(
       children: [
+        InkWell(
+          onTap: () async {
+            const url = 'https://www.youtube.com/@PRS/videos';
+            if (await canLaunch(url)) {
+              await launch(url);
+            } else {
+              throw 'Could not launch $url';
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(
+              "Watch PRS Videos on YouTube",
+              style: TextStyle(
+                  color: Colors.blue,
+                  decoration: TextDecoration.underline,
+                  fontSize: 16),
+            ),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: Text(
@@ -128,7 +104,6 @@ class _MyHomePageState extends State<MyHomePage> {
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
         ),
-        buildYoutubePlayer(),
         IconButton(
           icon: Icon(_todayIsLiked ? Icons.favorite : Icons.favorite_border,
               size: 48),
@@ -143,9 +118,6 @@ class _MyHomePageState extends State<MyHomePage> {
           decoration:
               InputDecoration(labelText: '메모', border: OutlineInputBorder()),
           maxLines: 5,
-          onChanged: (text) {
-            // 여기서 상태를 업데이트하지 않고 입력을 관리합니다.
-          },
         ),
       ],
     );
@@ -165,8 +137,8 @@ class _MyHomePageState extends State<MyHomePage> {
               setState(() {
                 _selectedDay = selectedDay;
                 _focusedDay = focusedDay;
+                _loadData(_formatDate(selectedDay));
               });
-              _loadData(_formatDate(selectedDay));
             },
           ),
           if (_selectedDay != null)
@@ -192,10 +164,6 @@ class _MyHomePageState extends State<MyHomePage> {
             decoration:
                 InputDecoration(labelText: '메모', border: OutlineInputBorder()),
             maxLines: 5,
-            onChanged: (text) {
-              _updateData(
-                  _formatDate(_selectedDay ?? DateTime.now()), _isLiked, text);
-            },
           ),
         ],
       ),
@@ -228,12 +196,6 @@ class _MyHomePageState extends State<MyHomePage> {
         onTap: (index) {
           setState(() {
             _selectedIndex = index;
-            if (index == 0) {
-              DateTime today = DateTime.now();
-              _focusedDay = today;
-              _selectedDay = today;
-              _loadData(_formatDate(today));
-            }
           });
         },
       ),
@@ -242,13 +204,23 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Widget buildProfileTab() {
     return Center(
-      child: Text('Profile Tab Content'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Text(
+              "내 정보",
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   void dispose() {
-    _youtubeController?.dispose();
     _memoController.dispose();
     _todayMemoController.dispose();
     super.dispose();
