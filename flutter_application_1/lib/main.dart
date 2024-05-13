@@ -34,6 +34,11 @@ class _MyHomePageState extends State<MyHomePage> {
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
+  Map<DateTime, List<bool>> _likedDays = {};
+  DateTime _normalizeDateTime(DateTime dateTime) {
+    return DateTime(dateTime.year, dateTime.month, dateTime.day);
+  }
+
   late DatabaseHelper _dbHelper;
 
   @override
@@ -42,6 +47,8 @@ class _MyHomePageState extends State<MyHomePage> {
     _dbHelper = DatabaseHelper.instance;
     _loadData(_formatDate(DateTime.now()));
     _loadTodayData();
+    _loadAllLikedDays();
+    print("Initial liked days: $_likedDays");
   }
 
   void _loadData(String date) async {
@@ -50,6 +57,9 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       _isLiked = isLiked ?? false;
       _memoController.text = memo ?? '';
+      if (isLiked != null) {
+        _likedDays[DateTime.parse(date)] = [isLiked];
+      }
     });
   }
 
@@ -63,12 +73,32 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  void _loadAllLikedDays() async {
+    var allLikes = await _dbHelper.getAllLikes();
+    setState(() {
+      _likedDays = allLikes
+          .map((date, liked) => MapEntry(DateTime.parse(date), [liked]));
+    });
+  }
+
   void _updateData(String date, bool liked, String memo) async {
     await _dbHelper.updateDayDetails(date, liked, memo);
     _loadData(date);
     if (date == _formatDate(DateTime.now())) {
       _loadTodayData();
     }
+  }
+
+  void _onTabTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+      if (index == 0) {
+        DateTime today = DateTime.now();
+        _focusedDay = today;
+        _selectedDay = today;
+        _loadData(_formatDate(today));
+      }
+    });
   }
 
   Widget buildTodayTab() {
@@ -140,6 +170,27 @@ class _MyHomePageState extends State<MyHomePage> {
                 _loadData(_formatDate(selectedDay));
               });
             },
+            calendarBuilders: CalendarBuilders(
+              markerBuilder: (context, date, events) {
+                bool isLiked =
+                    _likedDays[_normalizeDateTime(date)]?.first ?? false;
+                if (isLiked) {
+                  return Positioned(
+                    right: 26, // 오른쪽 정렬을 유지하면서
+                    bottom: 9, // 날짜의 바닥에서 5 단위 높이에 빨간 점을 위치
+                    child: Container(
+                      height: 7.0, // 원의 크기를 조금 줄임
+                      width: 7.0,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.red,
+                      ),
+                    ),
+                  );
+                }
+                return null; // 회색 점을 표시하지 않고, 시청 완료된 날짜에만 빨간 점 표시
+              },
+            ),
           ),
           if (_selectedDay != null)
             Padding(
@@ -193,11 +244,7 @@ class _MyHomePageState extends State<MyHomePage> {
           BottomNavigationBarItem(icon: Icon(Icons.person), label: '내 정보'),
         ],
         currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onTap: _onTabTapped,
       ),
     );
   }
@@ -222,7 +269,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void dispose() {
     _memoController.dispose();
-    _todayMemoController.dispose();
+    _todayMemoController.dispose;
     super.dispose();
   }
 }
@@ -260,6 +307,16 @@ class DatabaseHelper {
             $columnMemo TEXT NOT NULL
           )
           ''');
+  }
+
+  Future<Map<String, bool>> getAllLikes() async {
+    Database db = await instance.database;
+    var res = await db.query(table, columns: [columnDate, columnLiked]);
+    Map<String, bool> likes = {};
+    for (var row in res) {
+      likes[row[columnDate] as String] = row[columnLiked] == 1;
+    }
+    return likes;
   }
 
   Future<bool?> getLikedStatus(String date) async {
