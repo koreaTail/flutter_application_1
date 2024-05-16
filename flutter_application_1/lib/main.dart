@@ -36,15 +36,13 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _isTodayMemoEnabled = false;
   TextEditingController _memoController = TextEditingController();
   TextEditingController _todayMemoController = TextEditingController();
+  FocusNode _memoFocusNode = FocusNode();
+  FocusNode _todayMemoFocusNode = FocusNode();
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   Map<DateTime, List<bool>> _likedDays = {};
-  Map<DateTime, String?> _memoDays = {}; // 메모가 있는 날을 저장하는 맵
-
-  DateTime _normalizeDateTime(DateTime dateTime) {
-    return DateTime(dateTime.year, dateTime.month, dateTime.day);
-  }
+  Map<DateTime, String?> _memoDays = {};
 
   late DatabaseHelper _dbHelper;
 
@@ -55,7 +53,33 @@ class _MyHomePageState extends State<MyHomePage> {
     _loadData(_formatDate(DateTime.now()));
     _loadTodayData();
     _loadAllLikedDays();
-    _loadAllMemoDays(); // 메모가 있는 날을 로드
+    _loadAllMemoDays();
+    _memoFocusNode.addListener(_onMemoFocusChange);
+    _todayMemoFocusNode.addListener(_onTodayMemoFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _memoFocusNode.dispose();
+    _todayMemoFocusNode.dispose();
+    _memoController.dispose();
+    _todayMemoController.dispose();
+    super.dispose();
+  }
+
+  void _onMemoFocusChange() {
+    if (!_memoFocusNode.hasFocus) {
+      _updateMemo(
+          _formatDate(_normalizeDateTime(_selectedDay ?? DateTime.now())),
+          _memoController.text);
+    }
+  }
+
+  void _onTodayMemoFocusChange() {
+    if (!_todayMemoFocusNode.hasFocus) {
+      _updateTodayMemo(_formatDate(_normalizeDateTime(DateTime.now())),
+          _todayMemoController.text);
+    }
   }
 
   void _loadData(String date) async {
@@ -67,12 +91,12 @@ class _MyHomePageState extends State<MyHomePage> {
       if (isLiked != null) {
         _likedDays[DateTime.parse(date)] = [isLiked];
       }
-      _memoDays[DateTime.parse(date)] = memo; // 메모 정보를 저장
+      _memoDays[DateTime.parse(date)] = memo;
     });
   }
 
   void _loadTodayData() async {
-    String todayKey = _formatDate(DateTime.now());
+    String todayKey = _formatDate(_normalizeDateTime(DateTime.now()));
     bool? isLiked = await _dbHelper.getLikedStatus(todayKey);
     String? memo = await _dbHelper.getMemo(todayKey);
     setState(() {
@@ -84,16 +108,16 @@ class _MyHomePageState extends State<MyHomePage> {
   void _loadAllLikedDays() async {
     var allLikes = await _dbHelper.getAllLikes();
     setState(() {
-      _likedDays = allLikes
-          .map((date, liked) => MapEntry(DateTime.parse(date), [liked]));
+      _likedDays = allLikes.map((date, liked) =>
+          MapEntry(_normalizeDateTime(DateTime.parse(date)), [liked]));
     });
   }
 
   void _loadAllMemoDays() async {
     var allMemos = await _dbHelper.getAllMemos();
     setState(() {
-      _memoDays =
-          allMemos.map((date, memo) => MapEntry(DateTime.parse(date), memo));
+      _memoDays = allMemos.map((date, memo) =>
+          MapEntry(_normalizeDateTime(DateTime.parse(date)), memo));
     });
   }
 
@@ -110,7 +134,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void _updateData(String date, bool liked, String memo) async {
     await _dbHelper.updateDayDetails(date, liked, memo);
     _loadData(date);
-    if (date == _formatDate(DateTime.now())) {
+    if (date == _formatDate(_normalizeDateTime(DateTime.now()))) {
       _loadTodayData();
     }
   }
@@ -118,22 +142,36 @@ class _MyHomePageState extends State<MyHomePage> {
   void _onTabTapped(int index) {
     setState(() {
       _selectedIndex = index;
-      if (index == 0) {
-        DateTime today = DateTime.now();
-        _focusedDay = today;
-        _selectedDay = today;
-        _loadData(_formatDate(today));
-      }
     });
+
+    if (index == 0) {
+      DateTime today = DateTime.now();
+      _focusedDay = today;
+      _selectedDay = today;
+    }
+
+    // Ensure updates are done after state has settled
+    Future.delayed(Duration.zero, () {
+      if (_selectedDay != null) {
+        _updateMemo(_formatDate(_normalizeDateTime(_selectedDay!)),
+            _memoController.text);
+      }
+      _updateTodayMemo(_formatDate(_normalizeDateTime(DateTime.now())),
+          _todayMemoController.text);
+    });
+  }
+
+  DateTime _normalizeDateTime(DateTime dateTime) {
+    return DateTime(dateTime.year, dateTime.month, dateTime.day);
   }
 
   Widget buildTodayTab() {
     DateTime today = DateTime.now();
-    String todayKey = _formatDate(today);
+    String todayKey = _formatDate(_normalizeDateTime(today));
 
     return GestureDetector(
       onTap: () {
-        FocusScope.of(this.context).unfocus(); // 메모 외의 다른 부분을 누를 때 키보드를 비활성화
+        FocusScope.of(this.context).unfocus();
       },
       child: SingleChildScrollView(
         child: Center(
@@ -191,12 +229,10 @@ class _MyHomePageState extends State<MyHomePage> {
                   padding: const EdgeInsets.all(8.0),
                   child: TextField(
                     controller: _todayMemoController,
+                    focusNode: _todayMemoFocusNode,
                     decoration: InputDecoration(
                         labelText: '메모', border: OutlineInputBorder()),
                     maxLines: 5,
-                    onChanged: (value) {
-                      _updateTodayMemo(todayKey, value);
-                    },
                   ),
                 ),
             ],
@@ -209,7 +245,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget buildCalendarTab() {
     return GestureDetector(
       onTap: () {
-        FocusScope.of(this.context).unfocus(); // 메모 외의 다른 부분을 누를 때 키보드를 비활성화
+        FocusScope.of(this.context).unfocus();
       },
       child: SingleChildScrollView(
         child: Column(
@@ -225,8 +261,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 setState(() {
                   _selectedDay = selectedDay;
                   _focusedDay = focusedDay;
-                  _loadData(_formatDate(selectedDay));
                 });
+                _loadData(_formatDate(_normalizeDateTime(selectedDay)));
               },
               calendarBuilders: CalendarBuilders(
                 markerBuilder: (BuildContext context, date, events) {
@@ -249,8 +285,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                 color: Colors.red,
                               ),
                             ),
-                          if (isLiked && hasMemo)
-                            SizedBox(width: 4.0), // 두 점 사이의 간격
+                          if (isLiked && hasMemo) SizedBox(width: 4.0),
                           if (hasMemo)
                             Container(
                               height: 7.0,
@@ -290,8 +325,11 @@ class _MyHomePageState extends State<MyHomePage> {
               color: Colors.red,
               onPressed: () {
                 _isLiked = !_isLiked;
-                _updateData(_formatDate(_selectedDay ?? DateTime.now()),
-                    _isLiked, _memoController.text);
+                _updateData(
+                    _formatDate(
+                        _normalizeDateTime(_selectedDay ?? DateTime.now())),
+                    _isLiked,
+                    _memoController.text);
               },
             ),
             ElevatedButton(
@@ -307,13 +345,10 @@ class _MyHomePageState extends State<MyHomePage> {
                 padding: const EdgeInsets.all(8.0),
                 child: TextField(
                   controller: _memoController,
+                  focusNode: _memoFocusNode,
                   decoration: InputDecoration(
                       labelText: '메모', border: OutlineInputBorder()),
                   maxLines: 5,
-                  onChanged: (value) {
-                    _updateMemo(
-                        _formatDate(_selectedDay ?? DateTime.now()), value);
-                  },
                 ),
               ),
           ],
@@ -350,14 +385,9 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  bool isLeapYear(int year) {
-    return (year % 4 == 0) && (year % 100 != 0) || (year % 400 == 0);
-  }
-
   Widget buildProfileTab() {
     DateTime now = DateTime.now();
-    int totalDaysThisYear =
-        365 + (isLeapYear(now.year) ? 1 : 0); // 윤년 포함 총 일수 계산
+    int totalDaysThisYear = 365 + (isLeapYear(now.year) ? 1 : 0);
     int daysSinceYearStart = now.difference(DateTime(now.year)).inDays + 1;
     int daysWatchedThisYear = _likedDays.keys
         .where(
@@ -391,11 +421,8 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  @override
-  void dispose() {
-    _memoController.dispose();
-    _todayMemoController.dispose();
-    super.dispose();
+  bool isLeapYear(int year) {
+    return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
   }
 }
 
