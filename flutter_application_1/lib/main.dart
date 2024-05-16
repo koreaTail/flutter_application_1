@@ -32,12 +32,15 @@ class _MyHomePageState extends State<MyHomePage> {
   int _selectedIndex = 1;
   bool _isLiked = false;
   bool _todayIsLiked = false;
+  bool _isMemoEnabled = false;
+  bool _isTodayMemoEnabled = false;
   TextEditingController _memoController = TextEditingController();
   TextEditingController _todayMemoController = TextEditingController();
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   Map<DateTime, List<bool>> _likedDays = {};
+
   DateTime _normalizeDateTime(DateTime dateTime) {
     return DateTime(dateTime.year, dateTime.month, dateTime.day);
   }
@@ -51,7 +54,6 @@ class _MyHomePageState extends State<MyHomePage> {
     _loadData(_formatDate(DateTime.now()));
     _loadTodayData();
     _loadAllLikedDays();
-    print("Initial liked days: $_likedDays");
   }
 
   void _loadData(String date) async {
@@ -108,118 +110,161 @@ class _MyHomePageState extends State<MyHomePage> {
     DateTime today = DateTime.now();
     String todayKey = _formatDate(today);
 
-    return Column(
-      children: [
-        InkWell(
-          onTap: () async {
-            const url = 'https://www.youtube.com/@PRS/videos';
-            if (await canLaunch(url)) {
-              await launch(url);
-            } else {
-              throw 'Could not launch $url';
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: Text(
-              "Watch PRS Videos on YouTube",
-              style: TextStyle(
-                  color: Colors.blue,
-                  decoration: TextDecoration.underline,
-                  fontSize: 16),
-            ),
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(this.context).unfocus(); // 메모 외의 다른 부분을 누를 때 키보드를 비활성화
+      },
+      child: SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              InkWell(
+                onTap: () async {
+                  const url = 'https://www.youtube.com/@PRS/videos';
+                  if (await canLaunch(url)) {
+                    await launch(url);
+                  } else {
+                    throw 'Could not launch $url';
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text(
+                    "Watch PRS Videos on YouTube",
+                    style: TextStyle(
+                        color: Colors.blue,
+                        decoration: TextDecoration.underline,
+                        fontSize: 16),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  DateFormat('yyyy년 M월 d일').format(today),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                    _todayIsLiked ? Icons.favorite : Icons.favorite_border,
+                    size: 48),
+                color: Colors.red,
+                onPressed: () {
+                  bool newLiked = !_todayIsLiked;
+                  _updateData(todayKey, newLiked, _todayMemoController.text);
+                },
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _isTodayMemoEnabled = !_isTodayMemoEnabled;
+                  });
+                },
+                child: Text(_isTodayMemoEnabled ? '메모 숨기기' : '메모하기'),
+              ),
+              if (_isTodayMemoEnabled)
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: TextField(
+                    controller: _todayMemoController,
+                    decoration: InputDecoration(
+                        labelText: '메모', border: OutlineInputBorder()),
+                    maxLines: 5,
+                  ),
+                ),
+            ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Text(
-            DateFormat('yyyy년 M월 d일').format(today),
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-        ),
-        IconButton(
-          icon: Icon(_todayIsLiked ? Icons.favorite : Icons.favorite_border,
-              size: 48),
-          color: Colors.red,
-          onPressed: () {
-            bool newLiked = !_todayIsLiked;
-            _updateData(todayKey, newLiked, _todayMemoController.text);
-          },
-        ),
-        TextField(
-          controller: _todayMemoController,
-          decoration:
-              InputDecoration(labelText: '메모', border: OutlineInputBorder()),
-          maxLines: 5,
-        ),
-      ],
+      ),
     );
   }
 
   Widget buildCalendarTab() {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          TableCalendar(
-            firstDay: DateTime.utc(2010, 10, 16),
-            lastDay: DateTime.utc(2030, 3, 14),
-            focusedDay: _focusedDay,
-            calendarFormat: _calendarFormat,
-            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-            onDaySelected: (selectedDay, focusedDay) {
-              setState(() {
-                _selectedDay = selectedDay;
-                _focusedDay = focusedDay;
-                _loadData(_formatDate(selectedDay));
-              });
-            },
-            calendarBuilders: CalendarBuilders(
-              markerBuilder: (context, date, events) {
-                bool isLiked =
-                    _likedDays[_normalizeDateTime(date)]?.first ?? false;
-                if (isLiked) {
-                  return Positioned(
-                    right: 26, // 오른쪽 정렬을 유지하면서
-                    bottom: 9, // 날짜의 바닥에서 5 단위 높이에 빨간 점을 위치
-                    child: Container(
-                      height: 7.0, // 원의 크기를 조금 줄임
-                      width: 7.0,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.red,
-                      ),
-                    ),
-                  );
-                }
-                return null; // 회색 점을 표시하지 않고, 시청 완료된 날짜에만 빨간 점 표시
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(this.context).unfocus(); // 메모 외의 다른 부분을 누를 때 키보드를 비활성화
+      },
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            TableCalendar(
+              firstDay: DateTime.utc(2010, 10, 16),
+              lastDay: DateTime.utc(2030, 3, 14),
+              focusedDay: _focusedDay,
+              calendarFormat: _calendarFormat,
+              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+              onDaySelected: (selectedDay, focusedDay) {
+                setState(() {
+                  _selectedDay = selectedDay;
+                  _focusedDay = focusedDay;
+                  _loadData(_formatDate(selectedDay));
+                });
               },
-            ),
-          ),
-          if (_selectedDay != null)
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                DateFormat('yyyy년 M월 d일').format(_selectedDay!),
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              calendarBuilders: CalendarBuilders(
+                markerBuilder: (BuildContext context, date, events) {
+                  // 수정: context -> BuildContext
+                  bool isLiked =
+                      _likedDays[_normalizeDateTime(date)]?.first ?? false;
+                  if (isLiked) {
+                    return Positioned(
+                      right: 26,
+                      bottom: 9,
+                      child: Container(
+                        height: 7.0,
+                        width: 7.0,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.red,
+                        ),
+                      ),
+                    );
+                  }
+                  return null;
+                },
               ),
             ),
-          IconButton(
-            icon: Icon(_isLiked ? Icons.favorite : Icons.favorite_border,
-                size: 48),
-            color: Colors.red,
-            onPressed: () {
-              _isLiked = !_isLiked;
-              _updateData(_formatDate(_selectedDay ?? DateTime.now()), _isLiked,
-                  _memoController.text);
-            },
-          ),
-          TextField(
-            controller: _memoController,
-            decoration:
-                InputDecoration(labelText: '메모', border: OutlineInputBorder()),
-            maxLines: 5,
-          ),
-        ],
+            if (_selectedDay != null)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  DateFormat('yyyy년 M월 d일').format(_selectedDay!),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+              ),
+            IconButton(
+              icon: Icon(_isLiked ? Icons.favorite : Icons.favorite_border,
+                  size: 48),
+              color: Colors.red,
+              onPressed: () {
+                _isLiked = !_isLiked;
+                _updateData(_formatDate(_selectedDay ?? DateTime.now()),
+                    _isLiked, _memoController.text);
+              },
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _isMemoEnabled = !_isMemoEnabled;
+                });
+              },
+              child: Text(_isMemoEnabled ? '메모 숨기기' : '메모하기'),
+            ),
+            if (_isMemoEnabled)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: TextField(
+                  controller: _memoController,
+                  decoration: InputDecoration(
+                      labelText: '메모', border: OutlineInputBorder()),
+                  maxLines: 5,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -253,15 +298,13 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   bool isLeapYear(int year) {
-    return (year % 4 == 0) && (year % 100 != 0 || year % 400 == 0);
+    return (year % 4 == 0) && (year % 100 != 0) || (year % 400 == 0);
   }
 
   Widget buildProfileTab() {
     DateTime now = DateTime.now();
-    int totalDaysThisYear = 365 +
-        (isLeapYear(now.year)
-            ? 1
-            : 0); // Calculate the total days including leap year
+    int totalDaysThisYear =
+        365 + (isLeapYear(now.year) ? 1 : 0); // 윤년 포함 총 일수 계산
     int daysSinceYearStart = now.difference(DateTime(now.year)).inDays + 1;
     int daysWatchedThisYear = _likedDays.keys
         .where(
@@ -282,10 +325,6 @@ class _MyHomePageState extends State<MyHomePage> {
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
           ),
-          // Text(
-          //   "${daysWatchedThisYear}회 / ${totalDaysThisYear}일",
-          //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          // ),
           Text(
             "시청완료: ${daysWatchedThisYear}회 / ${daysSinceYearStart}일",
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -302,7 +341,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void dispose() {
     _memoController.dispose();
-    _todayMemoController.dispose;
+    _todayMemoController.dispose();
     super.dispose();
   }
 }
@@ -378,7 +417,6 @@ class DatabaseHelper {
         table, {columnLiked: liked ? 1 : 0, columnMemo: memo},
         where: '$columnDate = ?', whereArgs: [date]);
     if (res == 0) {
-      // If no update occurred, insert new record
       await db.insert(table,
           {columnDate: date, columnLiked: liked ? 1 : 0, columnMemo: memo});
     }
