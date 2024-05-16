@@ -40,6 +40,7 @@ class _MyHomePageState extends State<MyHomePage> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   Map<DateTime, List<bool>> _likedDays = {};
+  Map<DateTime, String?> _memoDays = {}; // 메모가 있는 날을 저장하는 맵
 
   DateTime _normalizeDateTime(DateTime dateTime) {
     return DateTime(dateTime.year, dateTime.month, dateTime.day);
@@ -54,6 +55,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _loadData(_formatDate(DateTime.now()));
     _loadTodayData();
     _loadAllLikedDays();
+    _loadAllMemoDays(); // 메모가 있는 날을 로드
   }
 
   void _loadData(String date) async {
@@ -65,6 +67,7 @@ class _MyHomePageState extends State<MyHomePage> {
       if (isLiked != null) {
         _likedDays[DateTime.parse(date)] = [isLiked];
       }
+      _memoDays[DateTime.parse(date)] = memo; // 메모 정보를 저장
     });
   }
 
@@ -84,6 +87,24 @@ class _MyHomePageState extends State<MyHomePage> {
       _likedDays = allLikes
           .map((date, liked) => MapEntry(DateTime.parse(date), [liked]));
     });
+  }
+
+  void _loadAllMemoDays() async {
+    var allMemos = await _dbHelper.getAllMemos();
+    setState(() {
+      _memoDays =
+          allMemos.map((date, memo) => MapEntry(DateTime.parse(date), memo));
+    });
+  }
+
+  void _updateMemo(String date, String memo) async {
+    await _dbHelper.updateDayDetails(date, _isLiked, memo);
+    _loadData(date);
+  }
+
+  void _updateTodayMemo(String date, String memo) async {
+    await _dbHelper.updateDayDetails(date, _todayIsLiked, memo);
+    _loadTodayData();
   }
 
   void _updateData(String date, bool liked, String memo) async {
@@ -173,6 +194,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     decoration: InputDecoration(
                         labelText: '메모', border: OutlineInputBorder()),
                     maxLines: 5,
+                    onChanged: (value) {
+                      _updateTodayMemo(todayKey, value);
+                    },
                   ),
                 ),
             ],
@@ -206,20 +230,37 @@ class _MyHomePageState extends State<MyHomePage> {
               },
               calendarBuilders: CalendarBuilders(
                 markerBuilder: (BuildContext context, date, events) {
-                  // 수정: context -> BuildContext
                   bool isLiked =
                       _likedDays[_normalizeDateTime(date)]?.first ?? false;
-                  if (isLiked) {
+                  bool hasMemo =
+                      _memoDays[_normalizeDateTime(date)]?.isNotEmpty ?? false;
+                  if (isLiked || hasMemo) {
                     return Positioned(
-                      right: 26,
-                      bottom: 9,
-                      child: Container(
-                        height: 7.0,
-                        width: 7.0,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.red,
-                        ),
+                      bottom: 4,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isLiked)
+                            Container(
+                              height: 7.0,
+                              width: 7.0,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.red,
+                              ),
+                            ),
+                          if (isLiked && hasMemo)
+                            SizedBox(width: 4.0), // 두 점 사이의 간격
+                          if (hasMemo)
+                            Container(
+                              height: 7.0,
+                              width: 7.0,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.blue,
+                              ),
+                            ),
+                        ],
                       ),
                     );
                   }
@@ -233,6 +274,14 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: Text(
                   DateFormat('yyyy년 M월 d일').format(_selectedDay!),
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+              ),
+            if (_memoController.text.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  _memoController.text,
+                  style: TextStyle(fontSize: 15),
                 ),
               ),
             IconButton(
@@ -261,6 +310,10 @@ class _MyHomePageState extends State<MyHomePage> {
                   decoration: InputDecoration(
                       labelText: '메모', border: OutlineInputBorder()),
                   maxLines: 5,
+                  onChanged: (value) {
+                    _updateMemo(
+                        _formatDate(_selectedDay ?? DateTime.now()), value);
+                  },
                 ),
               ),
           ],
@@ -389,6 +442,16 @@ class DatabaseHelper {
       likes[row[columnDate] as String] = row[columnLiked] == 1;
     }
     return likes;
+  }
+
+  Future<Map<String, String?>> getAllMemos() async {
+    Database db = await instance.database;
+    var res = await db.query(table, columns: [columnDate, columnMemo]);
+    Map<String, String?> memos = {};
+    for (var row in res) {
+      memos[row[columnDate] as String] = row[columnMemo] as String?;
+    }
+    return memos;
   }
 
   Future<bool?> getLikedStatus(String date) async {
